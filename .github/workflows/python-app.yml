@@ -31,3 +31,18 @@ jobs:
     - name: Executar o pytest no projeto
       run: |
         PYTHONPATH=. pytest tests/ -v --tb=short
+
+
+    Imagem: 
+      name: Construindo Imagem para Docker
+      runs-on: ubuntu-latest
+      needs: build
+      steps:
+        - name: Configurar o Docker na VM
+          uses: docker/build-push-action@v7.1.0
+          width:
+            push: true
+            tags:
+                gabrielsdl04/senai_api:latest
+                gabrielsdl04/senai_api:${{github.sha}}
+            
