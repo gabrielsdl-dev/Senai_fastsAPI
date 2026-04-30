@@ -17,7 +17,7 @@ WORKDIR /app
 
 #Criar Usuario não root para segurança
 
-RUN addgroup --system appgroup && add --system --ingroup appgroup appuser
+RUN addgroup --system appgroup && adduser --system --ingroup appgroup appuser
 
 # Copiando s instalação do python
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
