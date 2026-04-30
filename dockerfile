@@ -20,8 +20,8 @@ WORKDIR /app
 RUN addgroup --system appgroup && add --system --ingroup appgroup appuser
 
 # Copiando s instalação do python
-COPY --from:builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site/
-COPY --from:builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=builder /usr/local/bin/uvicorn /usr/local/bin/uvicorn
 
 # copiar o APP
 COPY app/ ./app/
