@@ -2,14 +2,25 @@ name: Python application
 
 on:
   push:
-    branches: ["main"]
+    branches:
+      - main
+      - develop
   pull_request:
-    branches: ["main"]
+    branches:
+      - main
+      - develop
+
+# Variáveis globais (professor pediu isso!)
+env:
+  IMAGE_NAME: gabrielsdl04/senai_api
 
 jobs:
+
+  # ─────────────────────────────────────────
+  # JOB 1: Build e Testes
+  # ─────────────────────────────────────────
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -32,11 +43,13 @@ jobs:
         run: |
           PYTHONPATH=. pytest tests/ -v --tb=short
 
+  # ─────────────────────────────────────────
+  # JOB 2: Build e Push da Imagem Docker
+  # ─────────────────────────────────────────
   imagem:
     name: Construindo Imagem para Docker
     runs-on: ubuntu-latest
     needs: build
-
     steps:
       - uses: actions/checkout@v4
 
@@ -51,6 +64,81 @@ jobs:
         with:
           push: true
           tags: |
-            gabrielsdl04/senai_api:latest
-            gabrielsdl04/senai_api:${{ github.sha }}
-            
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  # ─────────────────────────────────────────
+  # JOB 3: Deploy em HOMOLOGAÇÃO (develop)
+  # ─────────────────────────────────────────
+  deploy_homologacao:
+    name: Implantando em Homologação
+    runs-on: ubuntu-latest
+    needs: imagem
+    if: github.ref == 'refs/heads/develop'  # só roda na branch develop
+
+    steps:
+      - name: Deploy na EC2 de Homologação via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "Iniciando deploy em HOMOLOGAÇÃO"
+
+            sudo docker pull ${{ env.IMAGE_NAME }}:latest
+
+            sudo docker stop senai_api_homol 2>/dev/null || true
+            sudo docker rm senai_api_homol 2>/dev/null || true
+
+            # Homologação roda na porta 8080
+            sudo docker run --name senai_api_homol -d -p 8080:8080 ${{ env.IMAGE_NAME }}:latest
+
+            sleep 5
+            curl -f http://localhost:8080/health || exit 1
+            echo "Deploy em Homologação feito com sucesso!"
+
+  # ─────────────────────────────────────────
+  # JOB 4: Aprovação Manual (main)
+  # ─────────────────────────────────────────
+  aguardar_aprovacao:
+    name: Aguardando Aprovação para Produção
+    runs-on: ubuntu-latest
+    needs: imagem
+    if: github.ref == 'refs/heads/main'
+    environment: producao  # ← aqui o GitHub para e pede aprovação
+
+    steps:
+      - name: Aprovação concedida!
+        run: echo "Deploy em produção aprovado, seguindo..."
+
+  # ─────────────────────────────────────────
+  # JOB 5: Deploy em PRODUÇÃO (main + aprovação)
+  # ─────────────────────────────────────────
+  deploy_producao:
+    name: Implantando em Produção
+    runs-on: ubuntu-latest
+    needs: aguardar_aprovacao  # só roda DEPOIS da aprovação manual
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy na EC2 de Produção via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "Iniciando deploy em PRODUÇÃO"
+
+            sudo docker pull ${{ env.IMAGE_NAME }}:latest
+
+            sudo docker stop senai_api_prd 2>/dev/null || true
+            sudo docker rm senai_api_prd 2>/dev/null || true
+
+            # Produção roda na porta 80
+            sudo docker run --name senai_api_prd -d -p 80:8080 ${{ env.IMAGE_NAME }}:latest
+
+            sleep 5
+            curl -f http://localhost/health || exit 1
+            echo "Deploy em Produção feito com sucesso!"
